@@ -1,0 +1,102 @@
+Model the following Books and Publisher information as a graph model,
+and answer the following queries using Cypher.
+Author wrote various types of books which is published by publishers.
+A reader reads a books according to his linking and can
+recommend/provide review for it.
+1. Identify the labels and relationships, along with their properties, and
+draw a high-level Graph model. [3]
+2. Create nodes and relationships, along with their properties, and
+visualize your actual Graph model.[3]
+3. Answer the Queries
+a. List the names of authors who wrote “Comics”. [3]
+b. Count no. of readers of _____book published by
+ “Sage”. [3]
+c. List all the publisher whose name starts with “N” [4]
+d. List the names of people who have given a rating of (>=3) for
+______ book [4]
+
+
+
+
+# Step 1: Open MongoDB    using mongosh
+mongosh
+
+# Step 2: Create a database for the books and publishers graph
+use books_publisher_db
+
+# Step 3: Create collections and insert data for authors, books, publishers, and readers
+db.authors.insertMany([
+  { _id: 1, name: "John Smith", genre: "Comics" },
+  { _id: 2, name: "Jane Doe", genre: "Fiction" },
+  { _id: 3, name: "Alice Johnson", genre: "Science" }
+])
+
+db.publishers.insertMany([
+  { _id: 1, name: "Sage" },
+  { _id: 2, name: "Penguin" },
+  { _id: 3, name: "Nobel" }
+])
+
+db.books.insertMany([
+  { _id: 1, title: "Comic Adventures", authorId: 1, publisherId: 1, genre: "Comics" },
+  { _id: 2, title: "Science Explained", authorId: 3, publisherId: 2, genre: "Science" },
+  { _id: 3, title: "Fictional World", authorId: 2, publisherId: 3, genre: "Fiction" }
+])
+
+db.readers.insertMany([
+  { _id: 1, name: "Mike Lee", bookId: 1, rating: 4, review: "Loved the comic!" },
+  { _id: 2, name: "Emma Davis", bookId: 1, rating: 5, review: "Great story!" },
+  { _id: 3, name: "Lucas Brown", bookId: 2, rating: 3, review: "Interesting read" },
+  { _id: 4, name: "Olivia White", bookId: 3, rating: 2, review: "Not my type" }
+])
+
+# Step 4: Write the queries to fetch the required results
+
+# a. List the names of authors who wrote “Comics”
+db.books.aggregate([
+  { $match: { genre: "Comics" } },
+  { $lookup: {
+    from: "authors",
+    localField: "authorId",
+    foreignField: "_id",
+    as: "author_info"
+  }},
+  { $unwind: "$author_info" },
+  { $project: { "author_info.name": 1 } }
+])
+
+# b. Count number of readers who read a specific book published by "Sage"
+db.books.aggregate([
+  { $match: { publisherId: { $in: [db.publishers.findOne({ name: "Sage" })._id] } } },
+  { $lookup: {
+    from: "readers",
+    localField: "_id",
+    foreignField: "bookId",
+    as: "readers_info"
+  }},
+  { $project: { "readers_info": 1 } },
+  { $count: "totalReaders" }
+])
+
+# c. List all publishers whose name starts with “N”
+db.publishers.aggregate([
+  { $match: { name: { $regex: "^N", $options: "i" } } },
+  { $project: { name: 1 } }
+])
+
+# d. List the names of people who have given a rating of (>=3) for a specific book, for example, "Comic Adventures"
+db.books.aggregate([
+  { $match: { title: "Comic Adventures" } },
+  { $lookup: {
+    from: "readers",
+    localField: "_id",
+    foreignField: "bookId",
+    as: "reader_info"
+  }},
+  { $unwind: "$reader_info" },
+  { $match: { "reader_info.rating": { $gte: 3 } } },
+  { $project: { "reader_info.name": 1 } }
+])
+
+# Step 5: Exit MongoDB   
+exit
